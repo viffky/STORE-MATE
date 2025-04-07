@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  flask:
+    build: .
+    container_name: flask-app
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./Web:/app/web
+      - ./main.py:/app/main.py
+      - ./requirements.txt:/app/requirements.txt
+    depends_on:
+      - db
+    environment:
+      - FLASK_APP=main.py
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@db:5432/storeMate
+
+  db:
+    image: postgres:13
+    container_name: postgres-db
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=storeMate
+    volumes:
+      - ./PostgreSQL/data:/var/lib/postgresql/data
+      - ./PostgreSQL/init.sql:/docker-entrypoint-initdb.d/init.sql
+volumes:
+  postgres-data:
+    driver: local

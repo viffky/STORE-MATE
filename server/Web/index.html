@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>StoreMate Admin</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #eee; }
+    tr.new-row td { background-color: #f9f9f9; }
+    input { width: 100%; box-sizing: border-box; }
+    .controls { margin-bottom: 20px; }
+    button { margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Просмотр таблицы</h1>
+
+  <div class="controls">
+    <label>Выбери таблицу:
+      <select id="tableSelect"></select>
+    </label>
+    <button onclick="loadTable()">Загрузить</button>
+  </div>
+
+  <div id="tableContainer"></div>
+
+  <script>
+    const tableSelect = document.getElementById('tableSelect');
+    const tableContainer = document.getElementById('tableContainer');
+
+    const tables = [
+      'brands', 'category', 'stores', 'products',
+      'customers', 'suppliers', 'employees', 'stock',
+      'product_prices', 'sales', 'sale_items',
+      'restocks', 'restock_items', 'discounts',
+      'transfers', 'transfer_items'
+    ];
+
+    tables.forEach(t => {
+      const option = document.createElement('option');
+      option.value = t;
+      option.textContent = t;
+      tableSelect.appendChild(option);
+    });
+
+    async function loadTable() {
+      const table = tableSelect.value;
+      const res = await fetch(`/api/${table}`);
+      const data = await res.json();
+
+      renderTable(table, data);
+    }
+
+    function renderTable(tableName, data) {
+      if (!data || data.length === 0) {
+        tableContainer.innerHTML = `<p>Нет данных</p>`;
+        return;
+      }
+
+      const headers = Object.keys(data[0]);
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+
+      const headerRow = document.createElement('tr');
+      headers.forEach(h => {
+        const th = document.createElement('th');
+        th.textContent = h;
+        headerRow.appendChild(th);
+      });
+      headerRow.appendChild(document.createElement('th')); // actions
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      data.forEach(row => {
+        const tr = document.createElement('tr');
+        headers.forEach(h => {
+          const td = document.createElement('td');
+
+          if (h === 'image' && row[h]) {
+            const img = document.createElement('img');
+            img.src = `data:image/png;base64,${row[h]}`;
+            img.style.maxWidth = '100px';
+            td.appendChild(img);
+
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.dataset.key = h;
+            td.appendChild(fileInput);
+          } else {
+            const input = document.createElement('input');
+            input.value = row[h];
+            input.dataset.key = h;
+            td.appendChild(input);
+          }
+
+          tr.appendChild(td);
+        });
+
+        const actions = document.createElement('td');
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = '💾';
+        saveBtn.onclick = () => saveRow(tableName, row.id, tr);
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑';
+        delBtn.onclick = () => deleteRow(tableName, row.id);
+        actions.appendChild(saveBtn);
+        actions.appendChild(delBtn);
+        tr.appendChild(actions);
+
+        tbody.appendChild(tr);
+      });
+
+      // Новая строка
+      const newRow = document.createElement('tr');
+      newRow.classList.add('new-row');
+      headers.forEach(h => {
+        const td = document.createElement('td');
+        if (h === 'image') {
+          const fileInput = document.createElement('input');
+          fileInput.type = 'file';
+          fileInput.accept = 'image/*';
+          fileInput.dataset.key = h;
+          td.appendChild(fileInput);
+        } else {
+          const input = document.createElement('input');
+          input.dataset.key = h;
+          td.appendChild(input);
+        }
+        newRow.appendChild(td);
+      });
+
+      const actions = document.createElement('td');
+      const addBtn = document.createElement('button');
+      addBtn.textContent = '➕';
+      addBtn.onclick = () => addRow(tableName, newRow);
+      actions.appendChild(addBtn);
+      newRow.appendChild(actions);
+      tbody.appendChild(newRow);
+
+      table.appendChild(tbody);
+      tableContainer.innerHTML = '';
+      tableContainer.appendChild(table);
+    }
+
+    async function saveRow(table, id, tr) {
+      const inputs = tr.querySelectorAll('input');
+      const body = {};
+      for (const i of inputs) {
+        if (i.type === 'file' && i.files[0]) {
+          const base64 = await toBase64(i.files[0]);
+          body[i.dataset.key] = base64;
+        } else {
+          body[i.dataset.key] = i.value;
+        }
+      }
+
+      let url = `/api/${table}/${id}`;
+      let method = 'PUT';
+
+      if (table === 'products') {
+        // спец-эндпоинт без id в URL
+        url = `/api/products`;
+      }
+
+      const res = await fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) alert('Обновлено!');
+      else alert('Ошибка обновления');
+    }
+
+    async function deleteRow(table, id) {
+      if (!confirm(`Удалить ID ${id}?`)) return;
+      const res = await fetch(`/api/${table}/${id}`, { method: 'DELETE' });
+      if (res.ok) loadTable();
+      else alert('Ошибка удаления');
+    }
+
+    async function addRow(table, tr) {
+      const inputs = tr.querySelectorAll('input');
+      const body = {};
+      for (const i of inputs) {
+        if (i.type === 'file' && i.files[0]) {
+          const base64 = await toBase64(i.files[0]);
+          body[i.dataset.key] = base64;
+        } else {
+          body[i.dataset.key] = i.value;
+        }
+      }
+
+      const url = `/api/${table}`;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) loadTable();
+      else alert('Ошибка добавления');
+    }
+
+    function toBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result.split(',')[1]; // удалить data:...base64, префикс
+          resolve(result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+  </script>
+</body>
+</html>
